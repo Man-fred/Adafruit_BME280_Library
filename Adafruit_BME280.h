@@ -23,7 +23,7 @@
 
 #include "Arduino.h"
 
-#include <Adafruit_Sensor.h>
+//default, but not used #include <Adafruit_Sensor.h>
 #include <SPI.h>
 #include <Wire.h>
 
@@ -35,6 +35,8 @@
                                          *  @brief  alternate I2C address
                                          */
 #define BME280_ADDRESS_ALTERNATE (0x76) // Alternate Address
+#define BMP280_CHIPID (0x58) /**< BMP280 chip ID. */
+#define BME280_CHIPID (0x60) /**< BMP280 chip ID. */
 
 /*!
  *  @brief Register addresses
@@ -205,6 +207,13 @@ public:
                    sensor_sampling humSampling = SAMPLING_X16,
                    sensor_filter filter = FILTER_OFF,
                    standby_duration duration = STANDBY_MS_0_5);
+  // downgrade to BMP280
+  void setSampling(sensor_mode mode,
+                   sensor_sampling tempSampling,
+                   sensor_sampling pressSampling,
+                   sensor_filter filter = FILTER_OFF,
+                   standby_duration duration = STANDBY_MS_0_5);
+
 
   void takeForcedMeasurement();
   float readTemperature(void);

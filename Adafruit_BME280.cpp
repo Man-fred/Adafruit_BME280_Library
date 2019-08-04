@@ -136,7 +136,7 @@ bool Adafruit_BME280::init() {
 
   // check if sensor, i.e. the chip ID is correct
   _sensorID = read8(BME280_REGISTER_CHIPID);
-  if (_sensorID != 0x60)
+  if (_sensorID != BMP280_CHIPID && _sensorID != BME280_CHIPID)
     return false;
 
   // reset the device using soft-reset
@@ -181,18 +181,28 @@ void Adafruit_BME280::setSampling(sensor_mode mode,
   _measReg.osrs_t = tempSampling;
   _measReg.osrs_p = pressSampling;
 
-  _humReg.osrs_h = humSampling;
+  if (_sensorID == BME280_CHIPID){
+    _humReg.osrs_h = humSampling;
+  }
   _configReg.filter = filter;
   _configReg.t_sb = duration;
 
   // you must make sure to also set REGISTER_CONTROL after setting the
   // CONTROLHUMID register, otherwise the values won't be applied (see
   // DS 5.4.3)
-  write8(BME280_REGISTER_CONTROLHUMID, _humReg.get());
+  if (_sensorID == BME280_CHIPID){
+    write8(BME280_REGISTER_CONTROLHUMID, _humReg.get());
+  }
   write8(BME280_REGISTER_CONFIG, _configReg.get());
   write8(BME280_REGISTER_CONTROL, _measReg.get());
 }
-
+void Adafruit_BME280::setSampling(sensor_mode mode,
+                                  sensor_sampling tempSampling,
+                                  sensor_sampling pressSampling,
+                                  sensor_filter filter,
+                                  standby_duration duration) {
+  setSampling(mode, tempSampling, pressSampling, SAMPLING_X16, filter, duration);
+}
 /*!
  *   @brief  Encapsulate hardware and software SPI transfer into one
  * function
@@ -395,15 +405,16 @@ void Adafruit_BME280::readCoefficients(void) {
   _bme280_calib.dig_P7 = readS16_LE(BME280_REGISTER_DIG_P7);
   _bme280_calib.dig_P8 = readS16_LE(BME280_REGISTER_DIG_P8);
   _bme280_calib.dig_P9 = readS16_LE(BME280_REGISTER_DIG_P9);
-
-  _bme280_calib.dig_H1 = read8(BME280_REGISTER_DIG_H1);
-  _bme280_calib.dig_H2 = readS16_LE(BME280_REGISTER_DIG_H2);
-  _bme280_calib.dig_H3 = read8(BME280_REGISTER_DIG_H3);
-  _bme280_calib.dig_H4 = (read8(BME280_REGISTER_DIG_H4) << 4) |
-                         (read8(BME280_REGISTER_DIG_H4 + 1) & 0xF);
-  _bme280_calib.dig_H5 = (read8(BME280_REGISTER_DIG_H5 + 1) << 4) |
-                         (read8(BME280_REGISTER_DIG_H5) >> 4);
-  _bme280_calib.dig_H6 = (int8_t)read8(BME280_REGISTER_DIG_H6);
+  if (_sensorID == BME280_CHIPID){
+	  _bme280_calib.dig_H1 = read8(BME280_REGISTER_DIG_H1);
+	  _bme280_calib.dig_H2 = readS16_LE(BME280_REGISTER_DIG_H2);
+	  _bme280_calib.dig_H3 = read8(BME280_REGISTER_DIG_H3);
+	  _bme280_calib.dig_H4 = (read8(BME280_REGISTER_DIG_H4) << 4) |
+							 (read8(BME280_REGISTER_DIG_H4 + 1) & 0xF);
+	  _bme280_calib.dig_H5 = (read8(BME280_REGISTER_DIG_H5 + 1) << 4) |
+							 (read8(BME280_REGISTER_DIG_H5) >> 4);
+	  _bme280_calib.dig_H6 = (int8_t)read8(BME280_REGISTER_DIG_H6);
+  }
 }
 
 /*!
@@ -484,37 +495,41 @@ float Adafruit_BME280::readPressure(void) {
  *  @returns the humidity value read from the device
  */
 float Adafruit_BME280::readHumidity(void) {
-  readTemperature(); // must be done first to get t_fine
+  if (_sensorID == BME280_CHIPID){
+	  readTemperature(); // must be done first to get t_fine
 
-  int32_t adc_H = read16(BME280_REGISTER_HUMIDDATA);
-  if (adc_H == 0x8000) // value in case humidity measurement was disabled
-    return NAN;
+	  int32_t adc_H = read16(BME280_REGISTER_HUMIDDATA);
+	  if (adc_H == 0x8000) // value in case humidity measurement was disabled
+		return NAN;
 
-  int32_t v_x1_u32r;
+	  int32_t v_x1_u32r;
 
-  v_x1_u32r = (t_fine - ((int32_t)76800));
+	  v_x1_u32r = (t_fine - ((int32_t)76800));
 
-  v_x1_u32r = (((((adc_H << 14) - (((int32_t)_bme280_calib.dig_H4) << 20) -
-                  (((int32_t)_bme280_calib.dig_H5) * v_x1_u32r)) +
-                 ((int32_t)16384)) >>
-                15) *
-               (((((((v_x1_u32r * ((int32_t)_bme280_calib.dig_H6)) >> 10) *
-                    (((v_x1_u32r * ((int32_t)_bme280_calib.dig_H3)) >> 11) +
-                     ((int32_t)32768))) >>
-                   10) +
-                  ((int32_t)2097152)) *
-                     ((int32_t)_bme280_calib.dig_H2) +
-                 8192) >>
-                14));
+	  v_x1_u32r = (((((adc_H << 14) - (((int32_t)_bme280_calib.dig_H4) << 20) -
+					  (((int32_t)_bme280_calib.dig_H5) * v_x1_u32r)) +
+					 ((int32_t)16384)) >>
+					15) *
+				   (((((((v_x1_u32r * ((int32_t)_bme280_calib.dig_H6)) >> 10) *
+						(((v_x1_u32r * ((int32_t)_bme280_calib.dig_H3)) >> 11) +
+						 ((int32_t)32768))) >>
+					   10) +
+					  ((int32_t)2097152)) *
+						 ((int32_t)_bme280_calib.dig_H2) +
+					 8192) >>
+					14));
 
-  v_x1_u32r = (v_x1_u32r - (((((v_x1_u32r >> 15) * (v_x1_u32r >> 15)) >> 7) *
-                             ((int32_t)_bme280_calib.dig_H1)) >>
-                            4));
+	  v_x1_u32r = (v_x1_u32r - (((((v_x1_u32r >> 15) * (v_x1_u32r >> 15)) >> 7) *
+								 ((int32_t)_bme280_calib.dig_H1)) >>
+								4));
 
-  v_x1_u32r = (v_x1_u32r < 0) ? 0 : v_x1_u32r;
-  v_x1_u32r = (v_x1_u32r > 419430400) ? 419430400 : v_x1_u32r;
-  float h = (v_x1_u32r >> 12);
-  return h / 1024.0;
+	  v_x1_u32r = (v_x1_u32r < 0) ? 0 : v_x1_u32r;
+	  v_x1_u32r = (v_x1_u32r > 419430400) ? 419430400 : v_x1_u32r;
+	  float h = (v_x1_u32r >> 12);
+	  return h / 1024.0;
+  } else {
+	  return 0.0
+  }
 }
 
 /*!
